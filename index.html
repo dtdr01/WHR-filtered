@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Club Ratings</title>
+    
+    <!-- CSS Libraries -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.datatables.net/1.13.4/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+    <link href="https://cdn.datatables.net/responsive/2.4.1/css/responsive.bootstrap5.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    
+    <style>
+        body { background-color: #f0f2f5; font-family: -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding-bottom: 60px; }
+        
+        #login-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: #e9ecef; z-index: 9999; display: flex; align-items: center; justify-content: center; }
+        #app-content { display: none; }
+        
+        .navbar { background: linear-gradient(135deg, #0056b3, #004494); }
+        .navbar-brand { font-weight: bold; color: white !important; }
+        .card { border-radius: 12px; border: none; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px; }
+        
+        .elo-badge { background-color: #e3f2fd; color: #0d47a1; font-weight: 800; padding: 4px 8px; border-radius: 6px; }
+        .rank-cell { font-weight: bold; color: #666; text-align: center; }
+        
+        .player-link { color: #0d6efd; font-weight: 600; text-decoration: none; cursor: pointer; }
+        .player-link:hover { text-decoration: underline; }
+        
+        .score-link { color: #212529; font-weight: bold; text-decoration: none; border-bottom: 1px dotted #999; cursor: pointer; }
+        .score-link:hover { background-color: #ffffd0; }
+        
+        .vs-badge { width: 40px; height: 40px; background: #eee; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; margin: 0 auto; }
+        
+        #debug-area { display: none; background-color: #f8d7da; color: #721c24; padding: 10px; border-radius: 5px; margin-top: 15px; font-size: 0.85rem; }
+    </style>
+</head>
+<body>
+
+    <!-- LOGIN SCREEN -->
+    <div id="login-screen">
+        <div class="card p-4 text-center" style="max-width: 350px; width: 90%;">
+            <h3 class="mb-3">🏓 Club Login</h3>
+            <input type="password" id="password-input" class="form-control mb-3" placeholder="Password" style="text-align: center;" onkeydown="if(event.key==='Enter') checkPass()">
+            <button onclick="checkPass()" id="login-btn" class="btn btn-primary w-100 fw-bold">ENTER</button>
+            <p id="pass-error" class="text-danger mt-2 small" style="display:none;">Incorrect password</p>
+            <div id="debug-area"></div>
+        </div>
+    </div>
+
+    <!-- MAIN APP -->
+    <div id="app-content">
+        <nav class="navbar navbar-dark mb-3">
+            <div class="container d-flex justify-content-between">
+                <span class="navbar-brand">🏓 Club Ratings</span>
+                <span class="text-white-50 small" id="last-update">Loading...</span>
+            </div>
+        </nav>
+
+        <div class="container" id="main-interface">
+            <ul class="nav nav-tabs mb-3" id="myTab" role="tablist">
+                <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#rankings">🏆 Rankings</button></li>
+                <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#history">📈 History</button></li>
+                <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#forecast">🔮 Calculator</button></li>
+            </ul>
+
+            <div class="tab-content">
+                <!-- RANKINGS -->
+                <div class="tab-pane fade show active" id="rankings">
+                    <div class="card p-2">
+                        <table id="ratingTable" class="table table-hover dt-responsive nowrap" style="width:100%">
+                            <thead>
+                                <tr><th>#</th><th>Player</th><th>Elo</th><th>Win %</th><th>Games</th><th>6m</th><th>1y</th><th>Last</th></tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- HISTORY -->
+                <div class="tab-pane fade" id="history">
+                    <div class="card p-3">
+                        <label class="form-label fw-bold">Select Players:</label>
+                        <select id="player-select" class="form-control" multiple="multiple" style="width: 100%"></select>
+                        <div class="mt-3" style="height: 400px;"><canvas id="historyChart"></canvas></div>
+                    </div>
+                </div>
+
+                <!-- CALCULATOR -->
+                <div class="tab-pane fade" id="forecast">
+                    <div class="card p-3">
+                        <div class="mb-3 text-center">
+                            <label class="fw-bold">Match Format:</label>
+                            <select id="sets-input" class="form-select w-auto d-inline-block ms-2">
+                                <option value="1">Single Game</option>
+                                <option value="3">Best of 3</option>
+                                <option value="5" selected>Best of 5</option>
+                                <option value="7">Best of 7</option>
+                            </select>
+                        </div>
+                        <div class="row g-2 align-items-center">
+                            <div class="col-5">
+                                <select id="calc-p1" class="form-control select2-single"></select>
+                                <div class="text-center mt-2 fw-bold text-primary" id="elo-p1">-</div>
+                            </div>
+                            <div class="col-2 text-center"><div class="vs-badge">VS</div></div>
+                            <div class="col-5">
+                                <select id="calc-p2" class="form-control select2-single"></select>
+                                <div class="text-center mt-2 fw-bold text-primary" id="elo-p2">-</div>
+                            </div>
+                        </div>
+                        <div class="d-grid gap-2 mt-4"><button onclick="calculateWin()" class="btn btn-success fw-bold">PREDICT</button></div>
+                        <div id="result-area" class="mt-4" style="display:none;">
+                            <div class="progress" style="height: 25px;">
+                                <div id="bar-p1" class="progress-bar bg-primary" style="width: 50%"></div>
+                                <div id="bar-p2" class="progress-bar bg-warning" style="width: 50%"></div>
+                            </div>
+                            <div class="d-flex justify-content-between mt-1 px-1">
+                                <span class="fw-bold text-primary" id="prob-p1">50%</span>
+                                <span class="fw-bold text-warning" id="prob-p2">50%</span>
+                            </div>
+                            <hr><ul class="list-group list-group-flush small" id="score-probs"></ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- H2H MODAL -->
+    <div class="modal fade" id="h2hModal" tabindex="-1">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="h2hTitle">Head to Head</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="table-responsive">
+                        <!-- Updated styling for centering -->
+                        <table id="h2hTable" class="table table-sm table-striped table-bordered w-100 align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="text-start">Opponent</th>
+                                    <th class="text-center">Rating</th>
+                                    <th class="text-center">Matches</th>
+                                    <th class="text-center">W</th>
+                                    <th class="text-center">L</th>
+                                    <th class="text-center">Score</th>
+                                    <th class="text-center">Sets</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MATCHES DETAIL MODAL -->
+    <div class="modal fade" id="matchesModal" tabindex="-1" style="z-index: 1060;">
+        <div class="modal-dialog modal-sm modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-light py-2">
+                    <h6 class="modal-title mb-0" id="matchDetailTitle">History</h6>
+                    <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <ul class="list-group list-group-flush small" id="matchDetailList"></ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SCRIPTS -->
+    <script src="https://code.jquery.com/jquery-3.7.0.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap5.min.js"></script>
+    <script src="https://cdn.datatables.net/responsive/2.4.1/js/dataTables.responsive.min.js"></script>
+    <script src="https://cdn.datatables.net/responsive/2.4.1/js/responsive.bootstrap5.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+    <script>
+        const CLUB_PASSWORD = "pingpong"; 
+        const DATA_FILE = "./ratings_data.json"; 
+        
+        let GLOBAL_DATA = null;
+        let CHART_INSTANCE = null;
+        let H2H_TABLE = null;
+        let h2hModalInstance = null;
+
+        function checkPass() {
+            if(document.getElementById('password-input').value === CLUB_PASSWORD) {
+                const btn = document.getElementById('login-btn');
+                btn.innerText = "Loading...";
+                btn.disabled = true;
+                document.getElementById('pass-error').style.display='none';
+                initApp();
+            } else {
+                document.getElementById('pass-error').style.display='block';
+            }
+        }
+
+        async function initApp() {
+            try {
+                const res = await fetch(DATA_FILE + '?t=' + new Date().getTime());
+                if (!res.ok) throw new Error("File not found");
+                GLOBAL_DATA = await res.json();
+                
+                document.getElementById('login-screen').style.display='none';
+                document.getElementById('app-content').style.display='block';
+                document.getElementById('last-update').innerText = "Updated: " + GLOBAL_DATA.meta.updated;
+
+                const tData = GLOBAL_DATA.leaderboard.map(p => [
+                    "", 
+                    `<a class="player-link" onclick="openH2H('${p.name}')">${p.name}</a>`,
+                    p.elo,
+                    p.win_pct + "%",
+                    p.games,
+                    p.games_6m,
+                    p.games_1y,
+                    p.last_match
+                ]);
+
+                const table = $('#ratingTable').DataTable({
+                    destroy: true,
+                    data: tData,
+                    pageLength: 25,
+                    lengthMenu: [[10, 25, 50, -1], [10, 25, 50, "All"]],
+                    responsive: true,
+                    order: [[ 2, "desc" ]], 
+                    columnDefs: [
+                        { targets: 0, className: 'rank-cell' },
+                        { targets: 2, render: (d) => `<span class="elo-badge">${d}</span>` }
+                    ]
+                });
+
+                table.on('order.dt search.dt', function () {
+                    table.column(0, {search:'applied', order:'applied'}).nodes().each((cell, i) => cell.innerHTML = i + 1);
+                }).draw();
+
+                const names = GLOBAL_DATA.leaderboard.map(p => p.name).sort();
+                names.forEach(n => {
+                    $('#player-select').append(new Option(n, n));
+                    $('#calc-p1').append(new Option(n, n));
+                    $('#calc-p2').append(new Option(n, n));
+                });
+
+                $('.select2-single').select2({ width: '100%' });
+                $('#player-select').select2({ placeholder: "Select players...", width: '100%' });
+                
+                const top5 = GLOBAL_DATA.leaderboard.slice(0, 5).map(p => p.name);
+                $('#player-select').val(top5).trigger('change');
+                updateChart();
+                $('#player-select').on('change', updateChart);
+
+            } catch (e) {
+                console.error(e);
+                document.getElementById('debug-area').style.display='block';
+                document.getElementById('debug-area').innerHTML = "Load Failed: " + e.message;
+                document.getElementById('login-btn').disabled = false;
+            }
+        }
+
+        function openH2H(player) {
+            document.getElementById('h2hTitle').innerText = "H2H: " + player;
+            const oppStats = {};
+            
+            GLOBAL_DATA.matches.forEach(m => {
+                let opponent = null;
+                let isP1 = false;
+                if (m.p1 === player) { opponent = m.p2; isP1 = true; }
+                else if (m.p2 === player) { opponent = m.p1; isP1 = false; }
+                
+                if (opponent) {
+                    if (!oppStats[opponent]) {
+                        oppStats[opponent] = { w:0, l:0, d:0, games:0, sw:0, sl:0, history: [] };
+                    }
+                    const score = m.sc.split('-');
+                    const s1 = parseInt(score[0]);
+                    const s2 = parseInt(score[1]);
+                    
+                    let pWins = 0, pLoss = 0;
+                    if (isP1) { pWins = s1; pLoss = s2; } 
+                    else { pWins = s2; pLoss = s1; }
+                    
+                    // Match result: Who won the match?
+                    if (pWins > pLoss) oppStats[opponent].w++;
+                    else if (pLoss > pWins) oppStats[opponent].l++;
+                    else oppStats[opponent].d++;
+                    
+                    // Set Score accumulation
+                    oppStats[opponent].sw += pWins;
+                    oppStats[opponent].sl += pLoss;
+                    
+                    oppStats[opponent].games++;
+                    oppStats[opponent].history.push({ date: m.d, score: `${pWins}-${pLoss}` });
+                }
+            });
+
+            const rows = [];
+            for (const [oppName, s] of Object.entries(oppStats)) {
+                const oppObj = GLOBAL_DATA.leaderboard.find(x => x.name === oppName);
+                const elo = oppObj ? oppObj.elo : "-";
+                const histStr = encodeURIComponent(JSON.stringify(s.history));
+                
+                rows.push([
+                    oppName,
+                    elo,
+                    s.games,
+                    s.w,
+                    s.l,
+                    `<span class="score-link" onclick="showMatches('${player}', '${oppName}', '${histStr}')">${s.w} - ${s.l}</span>`,
+                    `${s.sw} - ${s.sl}` // Set score
+                ]);
+            }
+
+            if (H2H_TABLE) H2H_TABLE.destroy();
+            
+            H2H_TABLE = $('#h2hTable').DataTable({
+                data: rows,
+                destroy: true,
+                paging: false,
+                info: false,
+                scrollY: "50vh",
+                scrollCollapse: true,
+                order: [[ 1, "desc" ]],
+                autoWidth: false, // Important for fix
+                columnDefs: [
+                    { targets: 0, className: "fw-bold text-start ps-3", width: "25%" },
+                    { targets: [1,2,3,4,5,6], className: "text-center" } // Center aligns numbers
+                ]
+            });
+
+            const modalEl = document.getElementById('h2hModal');
+            if (!h2hModalInstance) h2hModalInstance = new bootstrap.Modal(modalEl);
+            h2hModalInstance.show();
+        }
+
+        // *** GLOBAL FIX FOR MODAL ALIGNMENT ***
+        // This recalculates column widths exactly when the modal animation finishes
+        document.addEventListener('DOMContentLoaded', function() {
+            const h2hModalEl = document.getElementById('h2hModal');
+            h2hModalEl.addEventListener('shown.bs.modal', function () {
+                if (H2H_TABLE) {
+                    setTimeout(() => {
+                        H2H_TABLE.columns.adjust().draw();
+                    }, 150); // Slight delay for animation
+                }
+            });
+        });
+
+        function showMatches(p1, p2, dataStr) {
+            const history = JSON.parse(decodeURIComponent(dataStr));
+            history.sort((a,b) => new Date(b.date) - new Date(a.date));
+            const list = document.getElementById('matchDetailList');
+            list.innerHTML = "";
+            document.getElementById('matchDetailTitle').innerText = `${p1} vs ${p2}`;
+            history.forEach(h => {
+                list.innerHTML += `
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <span>${h.date}</span>
+                        <span class="fw-bold fs-6 badge bg-light text-dark border">${h.score}</span>
+                    </li>`;
+            });
+            const modal = new bootstrap.Modal(document.getElementById('matchesModal'));
+            modal.show();
+        }
+
+        function updateChart() {
+            const ctx = document.getElementById('historyChart').getContext('2d');
+            const selected = $('#player-select').val();
+            const colors = ['#0d6efd', '#dc3545', '#198754', '#fd7e14', '#6610f2'];
+            if (Object.keys(GLOBAL_DATA.history).length === 0) {
+                if(CHART_INSTANCE) CHART_INSTANCE.destroy();
+                return;
+            }
+            const datasets = selected.map((name, i) => ({
+                label: name,
+                data: GLOBAL_DATA.history[name],
+                borderColor: colors[i % colors.length],
+                backgroundColor: colors[i % colors.length],
+                borderWidth: 2,
+                pointRadius: 0,
+                tension: 0.3
+            })).filter(d => d.data);
+            if(CHART_INSTANCE) CHART_INSTANCE.destroy();
+            CHART_INSTANCE = new Chart(ctx, { type: 'line', data: { datasets: datasets }, options: { responsive: true, maintainAspectRatio: false, scales: { x: { type: 'time', time: { unit: 'month' } } }, plugins: { tooltip: { mode: 'index', intersect: false } } } });
+        }
+
+        function calculateWin() {
+            const p1 = GLOBAL_DATA.leaderboard.find(p => p.name === $('#calc-p1').val());
+            const p2 = GLOBAL_DATA.leaderboard.find(p => p.name === $('#calc-p2').val());
+            if(!p1 || !p2) return;
+            $('#elo-p1').text(p1.elo); $('#elo-p2').text(p2.elo);
+            const target = Math.ceil(parseInt($('#sets-input').val()) / 2);
+            const p = 1 / (1 + Math.pow(10, (p2.elo - p1.elo) / 400));
+            let prob1 = 0, scores = [];
+            for (let k=0; k<target; k++) { let w = combinations(target+k-1, k) * Math.pow(p, target) * Math.pow(1-p, k); prob1 += w; scores.push({s:`${target}-${k}`, p:w, w:p1.name}); }
+            for (let k=0; k<target; k++) { let w = combinations(target+k-1, k) * Math.pow(1-p, target) * Math.pow(p, k); scores.push({s:`${k}-${target}`, p:w, w:p2.name}); }
+            scores.sort((a,b)=>b.p-a.p);
+            const pct1 = (prob1 * 100).toFixed(1);
+            $('#bar-p1').css('width', pct1+'%').text(p1.name); $('#bar-p2').css('width', (100-pct1)+'%').text(p2.name);
+            $('#prob-p1').text(pct1+'%'); $('#prob-p2').text((100-pct1).toFixed(1)+'%');
+            $('#score-probs').empty();
+            scores.slice(0, 5).forEach(sc => { let clr = sc.w === p1.name ? 'text-primary' : 'text-warning'; $('#score-probs').append(`<li class="list-group-item d-flex justify-content-between"><span class="${clr} fw-bold">${sc.s} (${sc.w})</span><span class="badge bg-secondary rounded-pill">${(sc.p*100).toFixed(1)}%</span></li>`); });
+            $('#result-area').fadeIn();
+        }
+        function combinations(n, r) { if (r===0 || r===n) return 1; if (r>n) return 0; let res = 1; for (let i=1; i<=r; i++) res = res * (n-i+1)/i; return res; }
+    </script>
+</body>
+</html>
