@@ -88,7 +88,16 @@
                         </div>
                         <table id="ratingTable" class="table table-hover dt-responsive nowrap" style="width:100%">
                             <thead>
-                                <tr><th>#</th><th>Player</th><th>Elo</th><th>Win %</th><th>Games</th><th>6m</th><th>1y</th><th>Last</th></tr>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Player</th>
+                                    <th>Elo</th>
+                                    <th>Win %</th>
+                                    <th>Games</th>
+                                    <th>6m</th>
+                                    <th>1y</th>
+                                    <th>Last</th>
+                                </tr>
                             </thead>
                             <tbody></tbody>
                         </table>
@@ -237,6 +246,9 @@
         let H2H_TABLE = null;
         let h2hModalInstance = null;
         let MAIN_TABLE = null;
+        
+        // Store current Ranks map
+        let CURRENT_RANKS = {};
 
         function checkPass() {
             if(document.getElementById('password-input').value === CLUB_PASSWORD) {
@@ -266,6 +278,25 @@
             return true;
         }
 
+        // --- NEW: Recalculate Ranks based on Filter & Elo ---
+        function updateRanks() {
+            const filterVal = $('#activity-filter').val();
+            
+            // 1. Filter players
+            const activePlayers = GLOBAL_DATA.leaderboard.filter(p => {
+                return checkActivity(p.last_match, filterVal);
+            });
+
+            // 2. Sort by Elo Descending
+            activePlayers.sort((a, b) => b.elo - a.elo);
+
+            // 3. Assign Ranks
+            CURRENT_RANKS = {};
+            activePlayers.forEach((p, index) => {
+                CURRENT_RANKS[p.name] = index + 1;
+            });
+        }
+
         async function initApp() {
             try {
                 const res = await fetch(DATA_FILE + '?t=' + new Date().getTime());
@@ -276,34 +307,20 @@
                 document.getElementById('app-content').style.display='block';
                 document.getElementById('last-update').innerText = "Updated: " + GLOBAL_DATA.meta.updated;
 
-                // --- 1. PRE-CALCULATE RANKS ---
-                // We pre-calculate ranks for EVERY filter mode so search is fast and consistent.
-                // ranks[filterType] = { playerName: rankNumber }
-                const RANKS = {
-                    'all': {}, '1m': {}, '6m': {}, '1y': {}, 'inactive': {}
-                };
+                // Initial Rank Calc
+                updateRanks();
 
-                // Helper to generate ranks for a subset
-                function generateRanks(filterKey) {
-                    let counter = 1;
-                    GLOBAL_DATA.leaderboard.forEach(p => {
-                        // Leaderboard is ALREADY sorted by Elo descending in JSON
-                        if (checkActivity(p.last_match, filterKey)) {
-                            RANKS[filterKey][p.name] = counter++;
-                        }
-                    });
-                }
-                
-                // Build all rank lists
-                ['all', '1m', '6m', '1y', 'inactive'].forEach(generateRanks);
+                // 1. Custom Filtering for DataTables
+                $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
+                    if (settings.nTable.id !== 'ratingTable') return true;
+                    // Just check visibility. Rank is already handled by render.
+                    return checkActivity(data[7], $('#activity-filter').val());
+                });
 
-
-                // --- 2. BUILD TABLE DATA ---
-                // We do NOT hardcode the rank in the data array anymore.
-                // We calculate it dynamically in render() based on the current filter.
-                
+                // 2. Table Config
+                // Note: Index 8 (Hidden Name) is passed for safer lookup
                 const tData = GLOBAL_DATA.leaderboard.map(p => [
-                    p.name, // Index 0: Name (Key for lookup)
+                    0, // Placeholder
                     `<div class="d-flex align-items-center justify-content-between">
                         <a class="player-link" onclick="openH2H('${p.name}')">${p.name}</a>
                         <span class="timeline-btn" onclick="openTimeline('${p.name}')" title="Match History">📜</span>
@@ -313,10 +330,10 @@
                     p.games,
                     p.games_6m,
                     p.games_1y,
-                    p.last_match
+                    p.last_match,
+                    p.name // Hidden column for Rank Lookup
                 ]);
 
-                // --- 3. INIT DATATABLE ---
                 MAIN_TABLE = $('#ratingTable').DataTable({
                     destroy: true,
                     data: tData,
@@ -324,49 +341,28 @@
                     lengthMenu: [[10, 25, 50, -1], [10, 25, 50, "All"]],
                     responsive: true,
                     order: [[ 2, "desc" ]], // Default sort by Elo
-                    searchDelay: 350, // Performance optimization for search
-                    
-                    columns: [
+                    columnDefs: [
                         { 
-                            // RANK COLUMN (Index 0)
-                            title: "#", 
-                            className: 'rank-cell all',
-                            orderable: false, // Rank is fixed based on filter, not sortable itself
+                            targets: 0, 
+                            className: 'rank-cell',
+                            // Render Rank dynamically based on the Map
                             render: function(data, type, row) {
-                                // 'data' is the player name here (hidden value)
-                                // We lookup the rank based on current filter
-                                const currentFilter = $('#activity-filter').val();
-                                const rank = RANKS[currentFilter][data]; 
-                                return rank ? rank : "-";
+                                const playerName = row[8]; // Hidden Name Column
+                                return CURRENT_RANKS[playerName] || '-';
                             }
                         },
-                        { title: "Player", className: "all" }, // Index 1: Name HTML
-                        { title: "Elo", className: "all", render: (d) => `<span class="elo-badge">${d}</span>` },
-                        { title: "Win %", className: "min-tablet" },
-                        { title: "Games", className: "min-tablet" },
-                        { title: "6m", className: "desktop" },
-                        { title: "1y", className: "desktop" },
-                        { title: "Last", className: "desktop" }
+                        { targets: 2, render: (d) => `<span class="elo-badge">${d}</span>` },
+                        { targets: 8, visible: false } // Hide raw name
                     ]
                 });
 
-                // --- 4. FILTER LOGIC ---
-                $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
-                    if (settings.nTable.id !== 'ratingTable') return true;
-                    
-                    const filterVal = $('#activity-filter').val();
-                    const dateStr = data[7]; // Last Match Date
-                    
-                    return checkActivity(dateStr, filterVal);
+                // Update Ranks when Filter Changes
+                $('#activity-filter').on('change', function() {
+                    updateRanks(); // Recalc ranks
+                    MAIN_TABLE.rows().invalidate().draw(); // Redraw table with new ranks
                 });
 
-                // Reload table when filter changes
-                $('#activity-filter').on('change', function() { 
-                    // This triggers a re-render, which calls the rank lookup function
-                    MAIN_TABLE.draw(); 
-                });
-
-                // --- 5. DROPDOWNS ---
+                // 3. Dropdowns
                 const names = GLOBAL_DATA.leaderboard.map(p => p.name).sort();
                 names.forEach(n => {
                     $('#player-select').append(new Option(n, n));
