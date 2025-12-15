@@ -21,20 +21,11 @@
         .navbar-brand { font-weight: bold; color: white !important; }
         .card { border-radius: 12px; border: none; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px; }
         
-        .elo-badge { background-color: #e3f2fd; color: #0d47a1; font-weight: 800; padding: 4px 8px; border-radius: 6px; font-size: 0.95rem; }
+        .elo-badge { background-color: #e3f2fd; color: #0d47a1; font-weight: 800; padding: 4px 8px; border-radius: 6px; }
         .hist-elo-badge { background-color: #f8f9fa; color: #555; font-weight: bold; padding: 2px 6px; border-radius: 4px; border: 1px solid #ddd; font-size: 0.85em; }
-        .rank-cell { font-weight: bold; color: #666; text-align: center; }
+        .rank-cell { font-weight: bold; color: #555; text-align: center; font-size: 1.1em; }
         
-        /* Name Truncation for Mobile */
-        .name-cell {
-            max-width: 250px; /* Default Desktop */
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        
-        /* Links & Buttons */
-        .player-link { color: #0d6efd; font-weight: 600; text-decoration: none; cursor: pointer; margin-right: 5px; }
+        .player-link { color: #0d6efd; font-weight: 600; text-decoration: none; cursor: pointer; margin-right: 8px; }
         .player-link:hover { text-decoration: underline; }
         
         .timeline-btn { cursor: pointer; text-decoration: none; font-size: 1.1em; opacity: 0.7; transition: opacity 0.2s; }
@@ -48,18 +39,6 @@
         
         .vs-badge { width: 40px; height: 40px; background: #eee; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; margin: 0 auto; }
         #debug-area { display: none; background-color: #f8d7da; color: #721c24; padding: 10px; border-radius: 5px; margin-top: 15px; font-size: 0.85rem; }
-
-        /* MOBILE OPTIMIZATIONS */
-        @media (max-width: 576px) {
-            .container { padding-left: 10px; padding-right: 10px; }
-            .name-cell { max-width: 130px; } /* Force truncation on phone */
-            
-            /* Tighten table padding on mobile */
-            table.dataTable tbody td { padding: 8px 4px !important; }
-            
-            .elo-badge { padding: 2px 5px; font-size: 0.85rem; }
-            .rank-cell { font-size: 0.85rem; }
-        }
     </style>
 </head>
 <body>
@@ -87,7 +66,7 @@
         <div class="container" id="main-interface">
             <ul class="nav nav-tabs mb-3" id="myTab" role="tablist">
                 <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#rankings">🏆 Rankings</button></li>
-                <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#history">📈 History</button></li>
+                <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#history">📈 History Graph</button></li>
                 <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#forecast">🔮 Calculator</button></li>
             </ul>
 
@@ -109,23 +88,14 @@
                         </div>
                         <table id="ratingTable" class="table table-hover dt-responsive nowrap" style="width:100%">
                             <thead>
-                                <tr>
-                                    <th class="all">#</th> <!-- Class 'all' forces visibility -->
-                                    <th class="all">Player</th>
-                                    <th class="all">Elo</th>
-                                    <th class="min-tablet">Win %</th>
-                                    <th class="min-tablet">Games</th>
-                                    <th class="desktop">6m</th>
-                                    <th class="desktop">1y</th>
-                                    <th class="desktop">Last</th>
-                                </tr>
+                                <tr><th>#</th><th>Player</th><th>Elo</th><th>Win %</th><th>Games</th><th>6m</th><th>1y</th><th>Last</th></tr>
                             </thead>
                             <tbody></tbody>
                         </table>
                     </div>
                 </div>
 
-                <!-- HISTORY GRAPH -->
+                <!-- HISTORY -->
                 <div class="tab-pane fade" id="history">
                     <div class="card p-3">
                         <label class="form-label fw-bold">Select Players:</label>
@@ -280,6 +250,22 @@
             }
         }
 
+        // --- HELPER: LOGIC TO CHECK ACTIVITY ---
+        function checkActivity(dateStr, filterVal) {
+            if (filterVal === 'all') return true;
+            if (!dateStr || dateStr === '-' || dateStr === 'N/A') return filterVal === 'inactive';
+
+            const parts = dateStr.split('/');
+            const lastMatch = new Date(parts[2], parts[1] - 1, parts[0]);
+            const diffDays = Math.ceil(Math.abs(new Date() - lastMatch) / (1000 * 60 * 60 * 24)); 
+
+            if (filterVal === '1m') return diffDays <= 35;
+            if (filterVal === '6m') return diffDays <= 185;
+            if (filterVal === '1y') return diffDays <= 366;
+            if (filterVal === 'inactive') return diffDays > 366;
+            return true;
+        }
+
         async function initApp() {
             try {
                 const res = await fetch(DATA_FILE + '?t=' + new Date().getTime());
@@ -290,25 +276,16 @@
                 document.getElementById('app-content').style.display='block';
                 document.getElementById('last-update').innerText = "Updated: " + GLOBAL_DATA.meta.updated;
 
-                // Search Filter Logic
+                // 1. Setup Custom Filtering Logic (Used by Search Box)
                 $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
                     if (settings.nTable.id !== 'ratingTable') return true;
-                    const filterVal = $('#activity-filter').val();
-                    if (filterVal === 'all') return true;
-                    const dateStr = data[7]; 
-                    if (!dateStr || dateStr === '-' || dateStr === 'N/A') return filterVal === 'inactive';
-                    const parts = dateStr.split('/');
-                    const lastMatch = new Date(parts[2], parts[1] - 1, parts[0]);
-                    const diffDays = Math.ceil(Math.abs(new Date() - lastMatch) / (1000 * 60 * 60 * 24)); 
-                    if (filterVal === '1m') return diffDays <= 35;
-                    if (filterVal === '6m') return diffDays <= 185;
-                    if (filterVal === '1y') return diffDays <= 366;
-                    if (filterVal === 'inactive') return diffDays > 366;
-                    return true;
+                    return checkActivity(data[7], $('#activity-filter').val());
                 });
 
-                const tData = GLOBAL_DATA.leaderboard.map((p, index) => [
-                    index + 1, 
+                // 2. Setup Main Table
+                // Rank is placeholder "" initially, updated on draw
+                const tData = GLOBAL_DATA.leaderboard.map(p => [
+                    "", 
                     `<div class="d-flex align-items-center justify-content-between">
                         <a class="player-link" onclick="openH2H('${p.name}')">${p.name}</a>
                         <span class="timeline-btn" onclick="openTimeline('${p.name}')" title="Match History">📜</span>
@@ -327,15 +304,39 @@
                     pageLength: 25,
                     lengthMenu: [[10, 25, 50, -1], [10, 25, 50, "All"]],
                     responsive: true,
-                    order: [[ 2, "desc" ]], // Elo desc
+                    order: [[ 2, "desc" ]], 
                     columnDefs: [
-                        { targets: 0, className: 'rank-cell all' }, // Force Rank visible
-                        { targets: 1, className: 'name-cell all' }, // Force Name visible
-                        { targets: 2, render: (d) => `<span class="elo-badge">${d}</span>`, className: 'all' }, // Force Elo visible
-                        { targets: [3,4], className: 'min-tablet' }, // Hide win%/games on phone
-                        { targets: [5,6,7], className: 'desktop' }    // Hide detailed stats on phone/tablet
+                        { targets: 0, className: 'rank-cell' },
+                        { targets: 2, render: (d) => `<span class="elo-badge">${d}</span>` }
                     ]
                 });
+
+                // *** CORE RANK LOGIC ***
+                // Recalculate rank (1..N) based on Current Sort + Activity Filter
+                // BUT ignore text search so rank persists when searching
+                MAIN_TABLE.on('draw', function () {
+                    const filterVal = $('#activity-filter').val();
+                    let rankCounter = 1;
+                    
+                    // Iterate ALL rows in current sort order
+                    // { search: 'none' } means "Ignore text search input", but we check Activity manually
+                    MAIN_TABLE.rows({ order: 'applied', search: 'none' }).every(function (rowIdx, tableLoop, rowLoop) {
+                        const rowData = this.data();
+                        const lastMatch = rowData[7]; // Col 7 is Last Match Date
+                        
+                        // Check if this row belongs in the current activity view
+                        if (checkActivity(lastMatch, filterVal)) {
+                            // Assign Rank
+                            this.cell(rowIdx, 0).node().innerHTML = rankCounter++;
+                        } else {
+                            // Should be hidden by DataTables filter anyway, but safety clear
+                            this.cell(rowIdx, 0).node().innerHTML = "";
+                        }
+                    });
+                });
+                
+                // Trigger initial draw
+                MAIN_TABLE.draw();
 
                 $('#activity-filter').on('change', function() { MAIN_TABLE.draw(); });
 
