@@ -95,7 +95,7 @@
                     </div>
                 </div>
 
-                <!-- HISTORY -->
+                <!-- HISTORY GRAPH -->
                 <div class="tab-pane fade" id="history">
                     <div class="card p-3">
                         <label class="form-label fw-bold">Select Players:</label>
@@ -202,7 +202,7 @@
         </div>
     </div>
 
-    <!-- MINI MATCH DETAIL MODAL -->
+    <!-- MATCH DETAIL MODAL -->
     <div class="modal fade" id="matchesModal" tabindex="-1" style="z-index: 1060;">
         <div class="modal-dialog modal-sm modal-dialog-centered">
             <div class="modal-content">
@@ -250,7 +250,7 @@
             }
         }
 
-        // --- HELPER: LOGIC TO CHECK ACTIVITY ---
+        // --- CORE HELPER: Date Check ---
         function checkActivity(dateStr, filterVal) {
             if (filterVal === 'all') return true;
             if (!dateStr || dateStr === '-' || dateStr === 'N/A') return filterVal === 'inactive';
@@ -276,16 +276,34 @@
                 document.getElementById('app-content').style.display='block';
                 document.getElementById('last-update').innerText = "Updated: " + GLOBAL_DATA.meta.updated;
 
-                // 1. Setup Custom Filtering Logic (Used by Search Box)
-                $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
-                    if (settings.nTable.id !== 'ratingTable') return true;
-                    return checkActivity(data[7], $('#activity-filter').val());
-                });
+                // --- 1. PRE-CALCULATE RANKS ---
+                // We pre-calculate ranks for EVERY filter mode so search is fast and consistent.
+                // ranks[filterType] = { playerName: rankNumber }
+                const RANKS = {
+                    'all': {}, '1m': {}, '6m': {}, '1y': {}, 'inactive': {}
+                };
 
-                // 2. Setup Main Table
-                // Rank is placeholder "" initially, updated on draw
+                // Helper to generate ranks for a subset
+                function generateRanks(filterKey) {
+                    let counter = 1;
+                    GLOBAL_DATA.leaderboard.forEach(p => {
+                        // Leaderboard is ALREADY sorted by Elo descending in JSON
+                        if (checkActivity(p.last_match, filterKey)) {
+                            RANKS[filterKey][p.name] = counter++;
+                        }
+                    });
+                }
+                
+                // Build all rank lists
+                ['all', '1m', '6m', '1y', 'inactive'].forEach(generateRanks);
+
+
+                // --- 2. BUILD TABLE DATA ---
+                // We do NOT hardcode the rank in the data array anymore.
+                // We calculate it dynamically in render() based on the current filter.
+                
                 const tData = GLOBAL_DATA.leaderboard.map(p => [
-                    "", 
+                    p.name, // Index 0: Name (Key for lookup)
                     `<div class="d-flex align-items-center justify-content-between">
                         <a class="player-link" onclick="openH2H('${p.name}')">${p.name}</a>
                         <span class="timeline-btn" onclick="openTimeline('${p.name}')" title="Match History">📜</span>
@@ -298,49 +316,57 @@
                     p.last_match
                 ]);
 
+                // --- 3. INIT DATATABLE ---
                 MAIN_TABLE = $('#ratingTable').DataTable({
                     destroy: true,
                     data: tData,
                     pageLength: 25,
                     lengthMenu: [[10, 25, 50, -1], [10, 25, 50, "All"]],
                     responsive: true,
-                    order: [[ 2, "desc" ]], 
-                    columnDefs: [
-                        { targets: 0, className: 'rank-cell' },
-                        { targets: 2, render: (d) => `<span class="elo-badge">${d}</span>` }
+                    order: [[ 2, "desc" ]], // Default sort by Elo
+                    searchDelay: 350, // Performance optimization for search
+                    
+                    columns: [
+                        { 
+                            // RANK COLUMN (Index 0)
+                            title: "#", 
+                            className: 'rank-cell all',
+                            orderable: false, // Rank is fixed based on filter, not sortable itself
+                            render: function(data, type, row) {
+                                // 'data' is the player name here (hidden value)
+                                // We lookup the rank based on current filter
+                                const currentFilter = $('#activity-filter').val();
+                                const rank = RANKS[currentFilter][data]; 
+                                return rank ? rank : "-";
+                            }
+                        },
+                        { title: "Player", className: "all" }, // Index 1: Name HTML
+                        { title: "Elo", className: "all", render: (d) => `<span class="elo-badge">${d}</span>` },
+                        { title: "Win %", className: "min-tablet" },
+                        { title: "Games", className: "min-tablet" },
+                        { title: "6m", className: "desktop" },
+                        { title: "1y", className: "desktop" },
+                        { title: "Last", className: "desktop" }
                     ]
                 });
 
-                // *** CORE RANK LOGIC ***
-                // Recalculate rank (1..N) based on Current Sort + Activity Filter
-                // BUT ignore text search so rank persists when searching
-                MAIN_TABLE.on('draw', function () {
-                    const filterVal = $('#activity-filter').val();
-                    let rankCounter = 1;
+                // --- 4. FILTER LOGIC ---
+                $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
+                    if (settings.nTable.id !== 'ratingTable') return true;
                     
-                    // Iterate ALL rows in current sort order
-                    // { search: 'none' } means "Ignore text search input", but we check Activity manually
-                    MAIN_TABLE.rows({ order: 'applied', search: 'none' }).every(function (rowIdx, tableLoop, rowLoop) {
-                        const rowData = this.data();
-                        const lastMatch = rowData[7]; // Col 7 is Last Match Date
-                        
-                        // Check if this row belongs in the current activity view
-                        if (checkActivity(lastMatch, filterVal)) {
-                            // Assign Rank
-                            this.cell(rowIdx, 0).node().innerHTML = rankCounter++;
-                        } else {
-                            // Should be hidden by DataTables filter anyway, but safety clear
-                            this.cell(rowIdx, 0).node().innerHTML = "";
-                        }
-                    });
+                    const filterVal = $('#activity-filter').val();
+                    const dateStr = data[7]; // Last Match Date
+                    
+                    return checkActivity(dateStr, filterVal);
                 });
-                
-                // Trigger initial draw
-                MAIN_TABLE.draw();
 
-                $('#activity-filter').on('change', function() { MAIN_TABLE.draw(); });
+                // Reload table when filter changes
+                $('#activity-filter').on('change', function() { 
+                    // This triggers a re-render, which calls the rank lookup function
+                    MAIN_TABLE.draw(); 
+                });
 
-                // DROPDOWNS
+                // --- 5. DROPDOWNS ---
                 const names = GLOBAL_DATA.leaderboard.map(p => p.name).sort();
                 names.forEach(n => {
                     $('#player-select').append(new Option(n, n));
