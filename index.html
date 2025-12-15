@@ -21,16 +21,16 @@
         .navbar-brand { font-weight: bold; color: white !important; }
         .card { border-radius: 12px; border: none; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px; }
         
-        /* Badges */
-        .elo-badge { background-color: #e3f2fd; color: #0d47a1; font-weight: 800; padding: 4px 8px; border-radius: 6px; font-size: 0.95rem; }
-        .rank-cell { font-weight: bold; color: #555; text-align: center; font-size: 1.1em; width: 40px; }
+        .elo-badge { background-color: #e3f2fd; color: #0d47a1; font-weight: 800; padding: 4px 8px; border-radius: 6px; }
         .hist-elo-badge { background-color: #f8f9fa; color: #555; font-weight: bold; padding: 2px 6px; border-radius: 4px; border: 1px solid #ddd; font-size: 0.85em; }
+        .rank-cell { font-weight: bold; color: #555; text-align: center; font-size: 1.1em; width: 40px; }
         
-        /* Links */
-        .player-link { color: #0d6efd; font-weight: 600; text-decoration: none; cursor: pointer; margin-right: 8px; }
+        /* Player Links */
+        .player-name-wrapper { display: flex; align-items: center; justify-content: space-between; width: 100%; }
+        .player-link { color: #0d6efd; font-weight: 600; text-decoration: none; cursor: pointer; flex-grow: 1; }
         .player-link:hover { text-decoration: underline; }
-        .timeline-btn { cursor: pointer; text-decoration: none; font-size: 1.2em; opacity: 0.8; transition: transform 0.2s; }
-        .timeline-btn:hover { transform: scale(1.2); }
+        .timeline-btn { cursor: pointer; text-decoration: none; font-size: 1.2em; opacity: 0.7; transition: transform 0.2s; margin-left: 10px; }
+        .timeline-btn:hover { transform: scale(1.2); opacity: 1; }
 
         .score-link { color: #212529; font-weight: bold; text-decoration: none; border-bottom: 1px dotted #999; cursor: pointer; }
         .score-link:hover { background-color: #ffffd0; }
@@ -40,12 +40,6 @@
         
         .vs-badge { width: 40px; height: 40px; background: #eee; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; margin: 0 auto; }
         #debug-area { display: none; background-color: #f8d7da; color: #721c24; padding: 10px; border-radius: 5px; margin-top: 15px; font-size: 0.85rem; }
-
-        /* Responsive Tweaks */
-        @media (max-width: 576px) {
-            .container { padding-left: 10px; padding-right: 10px; }
-            .rank-cell { width: 30px; font-size: 1em; }
-        }
     </style>
 </head>
 <body>
@@ -78,13 +72,12 @@
             </ul>
 
             <div class="tab-content">
-                <!-- RANKINGS TAB -->
+                <!-- RANKINGS -->
                 <div class="tab-pane fade show active" id="rankings">
                     <div class="card p-3">
                         <div class="row mb-3">
                             <div class="col-md-6 d-flex align-items-center">
                                 <label class="fw-bold me-2 text-secondary">Filter:</label>
-                                <!-- onchange triggers updateTable() directly -->
                                 <select id="activity-filter" class="form-select form-select-sm w-auto" onchange="updateTable()">
                                     <option value="all">Show All</option>
                                     <option value="1m">Active (1 Month)</option>
@@ -97,14 +90,14 @@
                         <table id="ratingTable" class="table table-hover dt-responsive nowrap" style="width:100%">
                             <thead>
                                 <tr>
-                                    <th class="all">#</th>
-                                    <th class="all">Player</th>
-                                    <th class="all">Elo</th>
-                                    <th class="min-tablet">Win %</th>
-                                    <th class="min-tablet">Games</th>
-                                    <th class="desktop">6m</th>
-                                    <th class="desktop">1y</th>
-                                    <th class="desktop">Last</th>
+                                    <th>#</th>
+                                    <th>Player</th>
+                                    <th>Elo</th>
+                                    <th>Win %</th>
+                                    <th>Games</th>
+                                    <th>6m</th>
+                                    <th>1y</th>
+                                    <th>Last</th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
@@ -252,7 +245,9 @@
         let GLOBAL_DATA = null;
         let CHART_INSTANCE = null;
         let H2H_TABLE = null;
+        let h2hModalInstance = null;
         let MAIN_TABLE = null;
+        let CURRENT_RANKS = {};
 
         function checkPass() {
             if(document.getElementById('password-input').value === CLUB_PASSWORD) {
@@ -266,57 +261,6 @@
             }
         }
 
-        async function initApp() {
-            try {
-                const res = await fetch(DATA_FILE + '?t=' + new Date().getTime());
-                if (!res.ok) throw new Error("File not found");
-                GLOBAL_DATA = await res.json();
-                
-                document.getElementById('login-screen').style.display='none';
-                document.getElementById('app-content').style.display='block';
-                document.getElementById('last-update').innerText = "Updated: " + GLOBAL_DATA.meta.updated;
-
-                // 1. Initialize Table Structure (Empty)
-                MAIN_TABLE = $('#ratingTable').DataTable({
-                    data: [], // Start empty, filled by updateTable()
-                    pageLength: 25,
-                    lengthMenu: [[10, 25, 50, -1], [10, 25, 50, "All"]],
-                    responsive: true,
-                    order: [[ 0, "asc" ]], // Sort by Rank
-                    columns: [
-                        { title: "#", data: "rank", className: 'rank-cell all' },
-                        { title: "Player", data: "player_html", className: "all" },
-                        { title: "Elo", data: "elo_html", className: "all" },
-                        { title: "Win %", data: "win_pct", className: "min-tablet" },
-                        { title: "Games", data: "games", className: "min-tablet" },
-                        { title: "6m", data: "games_6m", className: "desktop" },
-                        { title: "1y", data: "games_1y", className: "desktop" },
-                        { title: "Last", data: "last_match", className: "desktop" }
-                    ]
-                });
-
-                // 2. Load Initial Data
-                updateTable();
-
-                // 3. Dropdowns
-                const names = GLOBAL_DATA.leaderboard.map(p => p.name).sort();
-                names.forEach(n => {
-                    $('#player-select').append(new Option(n, n));
-                    $('#calc-p1').append(new Option(n, n));
-                    $('#calc-p2').append(new Option(n, n));
-                });
-
-                $('.select2-single').select2({ width: '100%' });
-                $('#player-select').select2({ placeholder: "Select players...", width: '100%' });
-                const top5 = GLOBAL_DATA.leaderboard.slice(0, 5).map(p => p.name);
-                $('#player-select').val(top5).trigger('change');
-                updateChart();
-                $('#player-select').on('change', updateChart);
-
-            } catch (e) { console.error(e); alert("Load Failed"); }
-        }
-
-        // --- FILTER & UPDATE TABLE ---
         function checkActivity(dateStr, filterVal) {
             if (filterVal === 'all') return true;
             if (!dateStr || dateStr === '-' || dateStr === 'N/A') return filterVal === 'inactive';
@@ -330,43 +274,99 @@
             return true;
         }
 
-        function updateTable() {
+        // --- CORE RANK UPDATE ---
+        function updateRanks() {
             const filterVal = $('#activity-filter').val();
-            
-            // 1. Filter Data
-            const filteredData = GLOBAL_DATA.leaderboard.filter(p => checkActivity(p.last_match, filterVal));
-            
-            // 2. Sort by Elo Descending
-            filteredData.sort((a, b) => b.elo - a.elo);
-
-            // 3. Map to Table Rows with Fixed Rank
-            const rows = filteredData.map((p, index) => ({
-                rank: index + 1,
-                player_html: `<div class="d-flex align-items-center justify-content-between">
-                        <a class="player-link" onclick="openH2H('${p.name}')">${p.name}</a>
-                        <span class="timeline-btn" onclick="openTimeline('${p.name}')" title="Match History">📜</span>
-                     </div>`,
-                elo_html: `<span class="elo-badge">${p.elo}</span>`,
-                elo_raw: p.elo, // Hidden for sorting if needed, but we rely on pre-sort
-                win_pct: p.win_pct + "%",
-                games: p.games,
-                games_6m: p.games_6m,
-                games_1y: p.games_1y,
-                last_match: p.last_match
-            }));
-
-            // 4. Update DataTable
-            MAIN_TABLE.clear();
-            MAIN_TABLE.rows.add(rows);
-            MAIN_TABLE.draw();
+            const activePlayers = GLOBAL_DATA.leaderboard.filter(p => checkActivity(p.last_match, filterVal));
+            activePlayers.sort((a, b) => b.elo - a.elo);
+            CURRENT_RANKS = {};
+            activePlayers.forEach((p, index) => { CURRENT_RANKS[p.name] = index + 1; });
         }
 
-        // --- TIMELINE LOGIC ---
+        async function initApp() {
+            try {
+                const res = await fetch(DATA_FILE + '?t=' + new Date().getTime());
+                if (!res.ok) throw new Error("File not found");
+                GLOBAL_DATA = await res.json();
+                
+                document.getElementById('login-screen').style.display='none';
+                document.getElementById('app-content').style.display='block';
+                document.getElementById('last-update').innerText = "Updated: " + GLOBAL_DATA.meta.updated;
+
+                // 1. Init Table (Empty)
+                MAIN_TABLE = $('#ratingTable').DataTable({
+                    data: [], // Starts empty, filled by updateTable()
+                    pageLength: 25,
+                    lengthMenu: [[10, 25, 50, -1], [10, 25, 50, "All"]],
+                    responsive: true,
+                    order: [[ 2, "desc" ]], // Elo desc
+                    columns: [
+                        { title: "#", data: "rank", className: 'rank-cell all' },
+                        { title: "Player", data: "player_html", className: "all" },
+                        { title: "Elo", data: "elo_html", className: "all" },
+                        { title: "Win %", data: "win_pct", className: "min-tablet" },
+                        { title: "Games", data: "games", className: "min-tablet" },
+                        { title: "6m", data: "games_6m", className: "desktop" },
+                        { title: "1y", data: "games_1y", className: "desktop" },
+                        { title: "Last", data: "last_match", className: "desktop" }
+                    ]
+                });
+
+                // 2. Load Data
+                updateTable();
+
+                // 3. Dropdowns
+                const names = GLOBAL_DATA.leaderboard.map(p => p.name).sort();
+                names.forEach(n => {
+                    $('#player-select').append(new Option(n, n));
+                    $('#calc-p1').append(new Option(n, n));
+                    $('#calc-p2').append(new Option(n, n));
+                });
+                $('.select2-single').select2({ width: '100%' });
+                $('#player-select').select2({ placeholder: "Select players...", width: '100%' });
+                const top5 = GLOBAL_DATA.leaderboard.slice(0, 5).map(p => p.name);
+                $('#player-select').val(top5).trigger('change');
+                updateChart();
+                $('#player-select').on('change', updateChart);
+
+            } catch (e) { console.error(e); alert("Load Failed"); }
+        }
+
+        // --- UPDATE TABLE FUNCTION ---
+        function updateTable() {
+            updateRanks(); // Recalc ranks first
+            const filterVal = $('#activity-filter').val();
+
+            // Filter & Map
+            const displayRows = GLOBAL_DATA.leaderboard
+                .filter(p => checkActivity(p.last_match, filterVal))
+                .map(p => {
+                    const safeName = p.name.replace(/'/g, "\\'"); // Escape quotes
+                    return {
+                        rank: CURRENT_RANKS[p.name] || '-',
+                        player_html: `<div class="player-name-wrapper">
+                            <a class="player-link" onclick="openH2H('${safeName}')">${p.name}</a>
+                            <span class="timeline-btn" onclick="openTimeline('${safeName}')" title="Match History">📜</span>
+                         </div>`,
+                        elo_html: `<span class="elo-badge">${p.elo}</span>`,
+                        elo: p.elo, // For sorting
+                        win_pct: p.win_pct + "%",
+                        games: p.games,
+                        games_6m: p.games_6m,
+                        games_1y: p.games_1y,
+                        last_match: p.last_match
+                    };
+                });
+
+            // Feed Data
+            MAIN_TABLE.clear().rows.add(displayRows).draw();
+        }
+
+        // --- TIMELINE ---
         function openTimeline(player) {
             document.getElementById('timelineTitle').innerText = "History: " + player;
             const tbody = document.getElementById('timelineBody');
             tbody.innerHTML = "";
-
             const myMatches = [];
             const playerHistory = GLOBAL_DATA.history[player];
 
@@ -378,75 +378,57 @@
 
                 if (opponent) {
                     const scoreParts = m.sc.split('-');
-                    const s1 = parseInt(scoreParts[0]);
-                    const s2 = parseInt(scoreParts[1]);
-                    
+                    const s1 = parseInt(scoreParts[0]), s2 = parseInt(scoreParts[1]);
                     let myScore = isP1 ? s1 : s2;
                     let oppScore = isP1 ? s2 : s1;
-                    
-                    let result = "Draw";
-                    if (myScore > oppScore) result = "Win";
-                    if (myScore < oppScore) result = "Loss";
+                    let result = myScore > oppScore ? "Win" : (myScore < oppScore ? "Loss" : "Draw");
 
-                    let myElo = "-";
+                    let myElo = "-", oppElo = "-";
                     if (playerHistory) {
                         const entry = playerHistory.find(h => h.x === m.d);
                         if (entry) myElo = entry.y;
-                    }
-                    if (myElo === "-") {
-                        const pObj = GLOBAL_DATA.leaderboard.find(p => p.name === player);
-                        if (pObj) myElo = pObj.elo;
+                    } else {
+                         // Fallback BT Static
+                         const pObj = GLOBAL_DATA.leaderboard.find(p => p.name === player);
+                         if (pObj) myElo = pObj.elo;
                     }
 
-                    let oppElo = "-";
                     if (GLOBAL_DATA.history[opponent]) {
                         const entry = GLOBAL_DATA.history[opponent].find(h => h.x === m.d);
                         if (entry) oppElo = entry.y;
-                    }
-                    if (oppElo === "-") {
-                        const oppObj = GLOBAL_DATA.leaderboard.find(p => p.name === opponent);
-                        if (oppObj) oppElo = oppObj.elo;
+                    } else {
+                         const oppObj = GLOBAL_DATA.leaderboard.find(p => p.name === opponent);
+                         if (oppObj) oppElo = oppObj.elo;
                     }
 
                     myMatches.push({
-                        dateStr: m.d, 
-                        opp: opponent,
-                        res: result,
-                        score: `${myScore} - ${oppScore}`,
-                        elo: myElo,
-                        oppElo: oppElo 
+                        dateStr: m.d, opp: opponent, res: result, 
+                        score: `${myScore} - ${oppScore}`, elo: myElo, oppElo: oppElo 
                     });
                 }
             });
 
             myMatches.sort((a,b) => new Date(b.dateStr) - new Date(a.dateStr));
 
-            if (myMatches.length === 0) {
-                tbody.innerHTML = "<tr><td colspan='6' class='text-center'>No matches found.</td></tr>";
-            } else {
+            if (myMatches.length === 0) tbody.innerHTML = "<tr><td colspan='6' class='text-center'>No matches found.</td></tr>";
+            else {
                 myMatches.forEach(m => {
-                    let rowClass = "";
-                    let badgeClass = "bg-secondary";
+                    let rowClass = "", badgeClass = "bg-secondary";
                     if (m.res === "Win") { rowClass = "row-win"; badgeClass = "bg-success"; }
                     if (m.res === "Loss") { rowClass = "row-loss"; badgeClass = "bg-danger"; }
-
-                    tbody.innerHTML += `
-                    <tr class="${rowClass}">
+                    tbody.innerHTML += `<tr class="${rowClass}">
                         <td>${m.dateStr}</td>
                         <td class="text-center"><span class="hist-elo-badge">${m.elo}</span></td>
                         <td class="fw-bold">${m.opp}</td>
                         <td class="text-center"><span class="hist-elo-badge">${m.oppElo}</span></td>
                         <td class="text-center"><span class="badge ${badgeClass}">${m.res}</span></td>
-                        <td class="text-center fw-bold">${m.score}</td>
-                    </tr>`;
+                        <td class="text-center fw-bold">${m.score}</td></tr>`;
                 });
             }
-
-            const modal = new bootstrap.Modal(document.getElementById('timelineModal'));
-            modal.show();
+            new bootstrap.Modal(document.getElementById('timelineModal')).show();
         }
 
-        // --- H2H LOGIC ---
+        // --- H2H ---
         function openH2H(player) {
             document.getElementById('h2hTitle').innerText = "H2H: " + player;
             const oppStats = {};
@@ -459,8 +441,7 @@
                     if (!oppStats[opponent]) oppStats[opponent] = { w:0, l:0, d:0, games:0, sw:0, sl:0, history: [] };
                     const score = m.sc.split('-');
                     const s1 = parseInt(score[0]), s2 = parseInt(score[1]);
-                    let pWins = isP1 ? s1 : s2;
-                    let pLoss = isP1 ? s2 : s1;
+                    let pWins = isP1 ? s1 : s2, pLoss = isP1 ? s2 : s1;
                     if (pWins > pLoss) oppStats[opponent].w++;
                     else if (pLoss > pWins) oppStats[opponent].l++;
                     else oppStats[opponent].d++;
@@ -475,10 +456,12 @@
             for (const [oppName, s] of Object.entries(oppStats)) {
                 const oppObj = GLOBAL_DATA.leaderboard.find(x => x.name === oppName);
                 const elo = oppObj ? oppObj.elo : "-";
+                const safeP1 = player.replace(/'/g, "\\'");
+                const safeP2 = oppName.replace(/'/g, "\\'");
                 const histStr = encodeURIComponent(JSON.stringify(s.history));
                 rows.push([
                     oppName, elo, s.games, s.w, s.l,
-                    `<span class="score-link" onclick="showMatches('${player}', '${oppName}', '${histStr}')">${s.w} - ${s.l}</span>`,
+                    `<span class="score-link" onclick="showMatches('${safeP1}', '${safeP2}', '${histStr}')">${s.w} - ${s.l}</span>`,
                     `${s.sw} - ${s.sl}`
                 ]);
             }
