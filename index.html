@@ -14,35 +14,52 @@
     <style>
         body { background-color: #f0f2f5; font-family: -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding-bottom: 60px; }
         
-        /* Fixed Login Overlay */
-        #login-screen {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background-color: #e9ecef; z-index: 9999; display: flex;
-            align-items: center; justify-content: center;
-        }
-
-        #app-content { display: none; } 
-
+        #login-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: #e9ecef; z-index: 9999; display: flex; align-items: center; justify-content: center; }
+        #app-content { display: none; }
+        
         .navbar { background: linear-gradient(135deg, #0056b3, #004494); }
         .navbar-brand { font-weight: bold; color: white !important; }
         .card { border-radius: 12px; border: none; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px; }
         
-        .elo-badge { background-color: #e3f2fd; color: #0d47a1; font-weight: 800; padding: 4px 8px; border-radius: 6px; }
+        .elo-badge { background-color: #e3f2fd; color: #0d47a1; font-weight: 800; padding: 4px 8px; border-radius: 6px; font-size: 0.95rem; }
+        .hist-elo-badge { background-color: #f8f9fa; color: #555; font-weight: bold; padding: 2px 6px; border-radius: 4px; border: 1px solid #ddd; font-size: 0.85em; }
         .rank-cell { font-weight: bold; color: #666; text-align: center; }
         
-        .player-link { color: #0d6efd; font-weight: 600; text-decoration: none; cursor: pointer; }
+        /* Name Truncation for Mobile */
+        .name-cell {
+            max-width: 250px; /* Default Desktop */
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        /* Links & Buttons */
+        .player-link { color: #0d6efd; font-weight: 600; text-decoration: none; cursor: pointer; margin-right: 5px; }
         .player-link:hover { text-decoration: underline; }
         
+        .timeline-btn { cursor: pointer; text-decoration: none; font-size: 1.1em; opacity: 0.7; transition: opacity 0.2s; }
+        .timeline-btn:hover { opacity: 1.0; transform: scale(1.1); display: inline-block; }
+
         .score-link { color: #212529; font-weight: bold; text-decoration: none; border-bottom: 1px dotted #999; cursor: pointer; }
         .score-link:hover { background-color: #ffffd0; }
         
-        .vs-badge { width: 40px; height: 40px; background: #eee; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; margin: 0 auto; }
+        .row-win { border-left: 5px solid #198754; background-color: #f8fff9; }
+        .row-loss { border-left: 5px solid #dc3545; background-color: #fff8f8; }
         
+        .vs-badge { width: 40px; height: 40px; background: #eee; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; margin: 0 auto; }
         #debug-area { display: none; background-color: #f8d7da; color: #721c24; padding: 10px; border-radius: 5px; margin-top: 15px; font-size: 0.85rem; }
 
-        /* Filter Dropdown Styling */
-        .filter-wrapper { margin-bottom: 15px; display: flex; align-items: center; gap: 10px; }
-        .filter-label { font-weight: bold; color: #555; }
+        /* MOBILE OPTIMIZATIONS */
+        @media (max-width: 576px) {
+            .container { padding-left: 10px; padding-right: 10px; }
+            .name-cell { max-width: 130px; } /* Force truncation on phone */
+            
+            /* Tighten table padding on mobile */
+            table.dataTable tbody td { padding: 8px 4px !important; }
+            
+            .elo-badge { padding: 2px 5px; font-size: 0.85rem; }
+            .rank-cell { font-size: 0.85rem; }
+        }
     </style>
 </head>
 <body>
@@ -75,36 +92,32 @@
             </ul>
 
             <div class="tab-content">
-                
                 <!-- RANKINGS -->
                 <div class="tab-pane fade show active" id="rankings">
                     <div class="card p-3">
-                        
-                        <!-- NEW ACTIVITY FILTER -->
                         <div class="row mb-2">
                             <div class="col-md-6 d-flex align-items-center">
-                                <label class="filter-label me-2">Activity Filter:</label>
+                                <label class="fw-bold me-2 text-secondary">Filter:</label>
                                 <select id="activity-filter" class="form-select form-select-sm w-auto">
                                     <option value="all">Show All</option>
-                                    <option value="1m">Active (Last 1 Month)</option>
-                                    <option value="6m">Active (Last 6 Months)</option>
-                                    <option value="1y" selected>Active (Last 1 Year)</option>
+                                    <option value="1m">Active (1 Month)</option>
+                                    <option value="6m">Active (6 Months)</option>
+                                    <option value="1y" selected>Active (1 Year)</option>
                                     <option value="inactive">Inactive (> 1 Year)</option>
                                 </select>
                             </div>
                         </div>
-
                         <table id="ratingTable" class="table table-hover dt-responsive nowrap" style="width:100%">
                             <thead>
                                 <tr>
-                                    <th>#</th>
-                                    <th>Player</th>
-                                    <th>Elo</th>
-                                    <th>Win %</th>
-                                    <th>Games</th>
-                                    <th>6m</th>
-                                    <th>1y</th>
-                                    <th>Last</th>
+                                    <th class="all">#</th> <!-- Class 'all' forces visibility -->
+                                    <th class="all">Player</th>
+                                    <th class="all">Elo</th>
+                                    <th class="min-tablet">Win %</th>
+                                    <th class="min-tablet">Games</th>
+                                    <th class="desktop">6m</th>
+                                    <th class="desktop">1y</th>
+                                    <th class="desktop">Last</th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
@@ -112,7 +125,7 @@
                     </div>
                 </div>
 
-                <!-- HISTORY -->
+                <!-- HISTORY GRAPH -->
                 <div class="tab-pane fade" id="history">
                     <div class="card p-3">
                         <label class="form-label fw-bold">Select Players:</label>
@@ -192,7 +205,34 @@
         </div>
     </div>
 
-    <!-- MATCH DETAIL MODAL -->
+    <!-- TIMELINE MODAL -->
+    <div class="modal fade" id="timelineModal" tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title" id="timelineTitle">Match Timeline</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <table class="table table-hover mb-0 align-middle small">
+                        <thead class="table-light sticky-top">
+                            <tr>
+                                <th>Date</th>
+                                <th class="text-center">My Elo</th>
+                                <th>Opponent</th>
+                                <th class="text-center">Opp Elo</th>
+                                <th class="text-center">Result</th>
+                                <th class="text-center">Score</th>
+                            </tr>
+                        </thead>
+                        <tbody id="timelineBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MINI MATCH DETAIL MODAL -->
     <div class="modal fade" id="matchesModal" tabindex="-1" style="z-index: 1060;">
         <div class="modal-dialog modal-sm modal-dialog-centered">
             <div class="modal-content">
@@ -231,7 +271,7 @@
         function checkPass() {
             if(document.getElementById('password-input').value === CLUB_PASSWORD) {
                 const btn = document.getElementById('login-btn');
-                btn.innerText = "Loading Data...";
+                btn.innerText = "Loading...";
                 btn.disabled = true;
                 document.getElementById('pass-error').style.display='none';
                 initApp();
@@ -250,43 +290,29 @@
                 document.getElementById('app-content').style.display='block';
                 document.getElementById('last-update').innerText = "Updated: " + GLOBAL_DATA.meta.updated;
 
-                // 1. Setup Custom Filtering Logic for Date
-                $.fn.dataTable.ext.search.push(
-                    function(settings, data, dataIndex) {
-                        if (settings.nTable.id !== 'ratingTable') return true; // Only filter main table
+                // Search Filter Logic
+                $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
+                    if (settings.nTable.id !== 'ratingTable') return true;
+                    const filterVal = $('#activity-filter').val();
+                    if (filterVal === 'all') return true;
+                    const dateStr = data[7]; 
+                    if (!dateStr || dateStr === '-' || dateStr === 'N/A') return filterVal === 'inactive';
+                    const parts = dateStr.split('/');
+                    const lastMatch = new Date(parts[2], parts[1] - 1, parts[0]);
+                    const diffDays = Math.ceil(Math.abs(new Date() - lastMatch) / (1000 * 60 * 60 * 24)); 
+                    if (filterVal === '1m') return diffDays <= 35;
+                    if (filterVal === '6m') return diffDays <= 185;
+                    if (filterVal === '1y') return diffDays <= 366;
+                    if (filterVal === 'inactive') return diffDays > 366;
+                    return true;
+                });
 
-                        const filterVal = $('#activity-filter').val();
-                        if (filterVal === 'all') return true;
-
-                        const dateStr = data[7]; // Last Match Column (Index 7)
-                        
-                        // Handle "Never Played"
-                        if (!dateStr || dateStr === '-' || dateStr === 'N/A') {
-                            return filterVal === 'inactive';
-                        }
-
-                        // Parse DD/MM/YYYY
-                        const parts = dateStr.split('/');
-                        if (parts.length !== 3) return false;
-                        
-                        const lastMatch = new Date(parts[2], parts[1] - 1, parts[0]);
-                        const today = new Date();
-                        const diffTime = Math.abs(today - lastMatch);
-                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
-
-                        if (filterVal === '1m') return diffDays <= 35; // Buffer for 1 month
-                        if (filterVal === '6m') return diffDays <= 185;
-                        if (filterVal === '1y') return diffDays <= 366;
-                        if (filterVal === 'inactive') return diffDays > 366;
-                        
-                        return true;
-                    }
-                );
-
-                // 2. Setup Main Table
-                const tData = GLOBAL_DATA.leaderboard.map(p => [
-                    "", 
-                    `<a class="player-link" onclick="openH2H('${p.name}')">${p.name}</a>`,
+                const tData = GLOBAL_DATA.leaderboard.map((p, index) => [
+                    index + 1, 
+                    `<div class="d-flex align-items-center justify-content-between">
+                        <a class="player-link" onclick="openH2H('${p.name}')">${p.name}</a>
+                        <span class="timeline-btn" onclick="openTimeline('${p.name}')" title="Match History">📜</span>
+                     </div>`,
                     p.elo,
                     p.win_pct + "%",
                     p.games,
@@ -301,24 +327,19 @@
                     pageLength: 25,
                     lengthMenu: [[10, 25, 50, -1], [10, 25, 50, "All"]],
                     responsive: true,
-                    order: [[ 2, "desc" ]], 
+                    order: [[ 2, "desc" ]], // Elo desc
                     columnDefs: [
-                        { targets: 0, className: 'rank-cell' },
-                        { targets: 2, render: (d) => `<span class="elo-badge">${d}</span>` }
+                        { targets: 0, className: 'rank-cell all' }, // Force Rank visible
+                        { targets: 1, className: 'name-cell all' }, // Force Name visible
+                        { targets: 2, render: (d) => `<span class="elo-badge">${d}</span>`, className: 'all' }, // Force Elo visible
+                        { targets: [3,4], className: 'min-tablet' }, // Hide win%/games on phone
+                        { targets: [5,6,7], className: 'desktop' }    // Hide detailed stats on phone/tablet
                     ]
                 });
 
-                // Re-draw table when filter changes
-                $('#activity-filter').on('change', function() {
-                    MAIN_TABLE.draw();
-                });
+                $('#activity-filter').on('change', function() { MAIN_TABLE.draw(); });
 
-                // Update Rank column on sort/search
-                MAIN_TABLE.on('order.dt search.dt draw.dt', function () {
-                    MAIN_TABLE.column(0, {search:'applied', order:'applied'}).nodes().each((cell, i) => cell.innerHTML = i + 1);
-                }).draw();
-
-                // 3. Dropdowns
+                // DROPDOWNS
                 const names = GLOBAL_DATA.leaderboard.map(p => p.name).sort();
                 names.forEach(n => {
                     $('#player-select').append(new Option(n, n));
@@ -328,47 +349,116 @@
 
                 $('.select2-single').select2({ width: '100%' });
                 $('#player-select').select2({ placeholder: "Select players...", width: '100%' });
-                
                 const top5 = GLOBAL_DATA.leaderboard.slice(0, 5).map(p => p.name);
                 $('#player-select').val(top5).trigger('change');
                 updateChart();
                 $('#player-select').on('change', updateChart);
 
-            } catch (e) {
-                console.error(e);
-                document.getElementById('debug-area').style.display='block';
-                document.getElementById('debug-area').innerHTML = "Load Failed: " + e.message;
-                document.getElementById('login-btn').disabled = false;
-            }
+            } catch (e) { console.error(e); alert("Load Failed"); }
         }
 
-        // H2H Logic
-        function openH2H(player) {
-            document.getElementById('h2hTitle').innerText = "H2H: " + player;
-            const oppStats = {};
-            
+        // --- TIMELINE LOGIC ---
+        function openTimeline(player) {
+            document.getElementById('timelineTitle').innerText = "History: " + player;
+            const tbody = document.getElementById('timelineBody');
+            tbody.innerHTML = "";
+
+            const myMatches = [];
+            const playerHistory = GLOBAL_DATA.history[player];
+
             GLOBAL_DATA.matches.forEach(m => {
                 let opponent = null;
                 let isP1 = false;
                 if (m.p1 === player) { opponent = m.p2; isP1 = true; }
                 else if (m.p2 === player) { opponent = m.p1; isP1 = false; }
-                
+
                 if (opponent) {
-                    if (!oppStats[opponent]) {
-                        oppStats[opponent] = { w:0, l:0, d:0, games:0, sw:0, sl:0, history: [] };
+                    const scoreParts = m.sc.split('-');
+                    const s1 = parseInt(scoreParts[0]);
+                    const s2 = parseInt(scoreParts[1]);
+                    
+                    let myScore = isP1 ? s1 : s2;
+                    let oppScore = isP1 ? s2 : s1;
+                    
+                    let result = "Draw";
+                    if (myScore > oppScore) result = "Win";
+                    if (myScore < oppScore) result = "Loss";
+
+                    let myElo = "-";
+                    if (playerHistory) {
+                        const entry = playerHistory.find(h => h.x === m.d);
+                        if (entry) myElo = entry.y;
                     }
+                    if (myElo === "-") {
+                        const pObj = GLOBAL_DATA.leaderboard.find(p => p.name === player);
+                        if (pObj) myElo = pObj.elo;
+                    }
+
+                    let oppElo = "-";
+                    if (GLOBAL_DATA.history[opponent]) {
+                        const entry = GLOBAL_DATA.history[opponent].find(h => h.x === m.d);
+                        if (entry) oppElo = entry.y;
+                    }
+                    if (oppElo === "-") {
+                        const oppObj = GLOBAL_DATA.leaderboard.find(p => p.name === opponent);
+                        if (oppObj) oppElo = oppObj.elo;
+                    }
+
+                    myMatches.push({
+                        dateStr: m.d, 
+                        opp: opponent,
+                        res: result,
+                        score: `${myScore} - ${oppScore}`,
+                        elo: myElo,
+                        oppElo: oppElo 
+                    });
+                }
+            });
+
+            myMatches.sort((a,b) => new Date(b.dateStr) - new Date(a.dateStr));
+
+            if (myMatches.length === 0) {
+                tbody.innerHTML = "<tr><td colspan='6' class='text-center'>No matches found.</td></tr>";
+            } else {
+                myMatches.forEach(m => {
+                    let rowClass = "";
+                    let badgeClass = "bg-secondary";
+                    if (m.res === "Win") { rowClass = "row-win"; badgeClass = "bg-success"; }
+                    if (m.res === "Loss") { rowClass = "row-loss"; badgeClass = "bg-danger"; }
+
+                    tbody.innerHTML += `
+                    <tr class="${rowClass}">
+                        <td>${m.dateStr}</td>
+                        <td class="text-center"><span class="hist-elo-badge">${m.elo}</span></td>
+                        <td class="fw-bold">${m.opp}</td>
+                        <td class="text-center"><span class="hist-elo-badge">${m.oppElo}</span></td>
+                        <td class="text-center"><span class="badge ${badgeClass}">${m.res}</span></td>
+                        <td class="text-center fw-bold">${m.score}</td>
+                    </tr>`;
+                });
+            }
+
+            const modal = new bootstrap.Modal(document.getElementById('timelineModal'));
+            modal.show();
+        }
+
+        function openH2H(player) {
+            document.getElementById('h2hTitle').innerText = "H2H: " + player;
+            const oppStats = {};
+            GLOBAL_DATA.matches.forEach(m => {
+                let opponent = null;
+                let isP1 = false;
+                if (m.p1 === player) { opponent = m.p2; isP1 = true; }
+                else if (m.p2 === player) { opponent = m.p1; isP1 = false; }
+                if (opponent) {
+                    if (!oppStats[opponent]) oppStats[opponent] = { w:0, l:0, d:0, games:0, sw:0, sl:0, history: [] };
                     const score = m.sc.split('-');
-                    const s1 = parseInt(score[0]);
-                    const s2 = parseInt(score[1]);
-                    
-                    let pWins = 0, pLoss = 0;
-                    if (isP1) { pWins = s1; pLoss = s2; } 
-                    else { pWins = s2; pLoss = s1; }
-                    
+                    const s1 = parseInt(score[0]), s2 = parseInt(score[1]);
+                    let pWins = isP1 ? s1 : s2;
+                    let pLoss = isP1 ? s2 : s1;
                     if (pWins > pLoss) oppStats[opponent].w++;
                     else if (pLoss > pWins) oppStats[opponent].l++;
                     else oppStats[opponent].d++;
-                    
                     oppStats[opponent].sw += pWins;
                     oppStats[opponent].sl += pLoss;
                     oppStats[opponent].games++;
@@ -381,13 +471,8 @@
                 const oppObj = GLOBAL_DATA.leaderboard.find(x => x.name === oppName);
                 const elo = oppObj ? oppObj.elo : "-";
                 const histStr = encodeURIComponent(JSON.stringify(s.history));
-                
                 rows.push([
-                    oppName,
-                    elo,
-                    s.games,
-                    s.w,
-                    s.l,
+                    oppName, elo, s.games, s.w, s.l,
                     `<span class="score-link" onclick="showMatches('${player}', '${oppName}', '${histStr}')">${s.w} - ${s.l}</span>`,
                     `${s.sw} - ${s.sl}`
                 ]);
@@ -395,27 +480,14 @@
 
             if (H2H_TABLE) H2H_TABLE.destroy();
             H2H_TABLE = $('#h2hTable').DataTable({
-                data: rows,
-                destroy: true,
-                paging: false,
-                info: false,
-                scrollY: "50vh",
-                scrollCollapse: true,
-                order: [[ 1, "desc" ]],
-                autoWidth: false,
-                columnDefs: [
-                    { targets: 0, className: "fw-bold text-start ps-3", width: "25%" },
-                    { targets: [1,2,3,4,5,6], className: "text-center" }
-                ]
+                data: rows, destroy: true, paging: false, info: false, scrollY: "50vh", scrollCollapse: true, order: [[ 1, "desc" ]], autoWidth: false,
+                columnDefs: [ { targets: 0, className: "fw-bold text-start ps-3", width: "25%" }, { targets: [1,2,3,4,5,6], className: "text-center" } ]
             });
 
             const modalEl = document.getElementById('h2hModal');
             if (!h2hModalInstance) h2hModalInstance = new bootstrap.Modal(modalEl);
             h2hModalInstance.show();
-
-            modalEl.addEventListener('shown.bs.modal', function () {
-                if (H2H_TABLE) { setTimeout(() => { H2H_TABLE.columns.adjust().draw(); }, 150); }
-            }, { once: true });
+            modalEl.addEventListener('shown.bs.modal', function () { if (H2H_TABLE) { setTimeout(() => { H2H_TABLE.columns.adjust().draw(); }, 150); } }, { once: true });
         }
 
         function showMatches(p1, p2, dataStr) {
@@ -437,13 +509,7 @@
             const colors = ['#0d6efd', '#dc3545', '#198754', '#fd7e14', '#6610f2'];
             if (Object.keys(GLOBAL_DATA.history).length === 0) { if(CHART_INSTANCE) CHART_INSTANCE.destroy(); return; }
             const datasets = selected.map((name, i) => ({
-                label: name,
-                data: GLOBAL_DATA.history[name],
-                borderColor: colors[i % colors.length],
-                backgroundColor: colors[i % colors.length],
-                borderWidth: 2,
-                pointRadius: 0,
-                tension: 0.3
+                label: name, data: GLOBAL_DATA.history[name], borderColor: colors[i % colors.length], backgroundColor: colors[i % colors.length], borderWidth: 2, pointRadius: 0, tension: 0.3
             })).filter(d => d.data);
             if(CHART_INSTANCE) CHART_INSTANCE.destroy();
             CHART_INSTANCE = new Chart(ctx, { type: 'line', data: { datasets: datasets }, options: { responsive: true, maintainAspectRatio: false, scales: { x: { type: 'time', time: { unit: 'month' } } }, plugins: { tooltip: { mode: 'index', intersect: false } } } });
